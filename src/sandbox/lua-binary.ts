@@ -39,14 +39,25 @@ async function sha256File(filePath: string): Promise<string> {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-async function downloadFile(url: string, dest: string): Promise<void> {
+async function downloadFile(url: string, dest: string, redirectCount = 0): Promise<void> {
+  if (redirectCount > 3) throw new Error('Too many redirects');
   await fs.mkdir(path.dirname(dest), { recursive: true });
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest);
     https.get(url, { timeout: 60_000 }, res => {
       if (res.statusCode === 302 || res.statusCode === 301) {
         file.close();
-        downloadFile(res.headers.location!, dest).then(resolve).catch(reject);
+        const location = res.headers.location;
+        if (!location || !location.startsWith('https://')) {
+          reject(new Error(`Unsafe redirect: ${location}`));
+          return;
+        }
+        const allowed = ['https://github.com/', 'https://objects.githubusercontent.com/'];
+        if (!allowed.some(prefix => location.startsWith(prefix))) {
+          reject(new Error(`Redirect to unexpected domain: ${location}`));
+          return;
+        }
+        downloadFile(location, dest, redirectCount + 1).then(resolve).catch(reject);
         return;
       }
       if (res.statusCode !== 200) {
