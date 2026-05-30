@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+
+if (process.argv[2] === 'install') {
+  const { runInstaller } = await import('./installer/index.js');
+  await runInstaller();
+  process.exit(0);
+}
+
 import { createServer } from './server.js';
 
 async function main(): Promise<void> {
