@@ -3,6 +3,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { PathCache } from './security/path-cache.js';
 import { WatcherManager } from './resources/watcher-manager.js';
 import { RateLimiter } from './rate-limiter.js';
+import { registerConfigResource } from './resources/config.js';
+import { registerStructureResource } from './resources/structure.js';
+import { registerAssetsResource } from './resources/assets.js';
 
 const CWD = process.cwd();
 
@@ -28,8 +31,10 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
     version: '0.1.0',
   });
 
-  // Resources and tools are registered by separate modules (added in Tasks 11-24).
-  // Each registration call receives (server, { allowedRoots, pathCache, watcherManager, rateLimiter }).
+  registerConfigResource(server, { allowedRoots, pathCache });
+  registerStructureResource(server, { allowedRoots, pathCache });
+  registerAssetsResource(server, { allowedRoots, pathCache });
+  // More resources registered in Tasks 14-23
 
   const transport = new StdioServerTransport();
 
