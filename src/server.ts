@@ -15,6 +15,7 @@ import { registerSettingsResource } from './resources/settings.js';
 import { registerDevLogResource } from './resources/dev-log.js';
 import { registerLuaFileResource } from './resources/lua-file.js';
 import { registerDataFileResource } from './resources/data-file.js';
+import { registerContextResource } from './resources/context.js';
 
 const CWD = process.cwd();
 
@@ -52,7 +53,8 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
   registerDevLogResource(server);
   registerLuaFileResource(server, { allowedRoots, pathCache });
   registerDataFileResource(server, { allowedRoots, pathCache });
-  // More resources registered in Tasks 21-23
+  registerContextResource(server, { allowedRoots, pathCache });
+  // More resources registered in Tasks 22-23
 
   const transport = new StdioServerTransport();
 
