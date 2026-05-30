@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { rotateBak, writeLuaFile, patchConfig } from '../../../src/tools/file-tools.js';
+import { rotateBak, writeLuaFile, patchConfig, validateDataFilename, deleteFile } from '../../../src/tools/file-tools.js';
 
 describe('rotateBak', () => {
   let dir: string;
@@ -114,5 +114,61 @@ describe('patchConfig', () => {
   it('throws config_too_complex for function-valued fields', () => {
     const src = `return {\n  width = get_width(),\n}`;
     expect(() => patchConfig(src, { width: 640 })).toThrow();
+  });
+});
+
+describe('validateDataFilename', () => {
+  it('allows normal filenames', () => {
+    expect(validateDataFilename('data.json')).toBe(true);
+    expect(validateDataFilename('save_01.csv')).toBe(true);
+    expect(validateDataFilename('level1.txt')).toBe(true);
+  });
+
+  it('rejects path separators', () => {
+    expect(validateDataFilename('sub/file.json')).toBe(false);
+    expect(validateDataFilename('sub\\file.json')).toBe(false);
+  });
+
+  it('rejects colon (Windows ADS)', () => {
+    expect(validateDataFilename('file.txt:hidden')).toBe(false);
+  });
+
+  it('rejects null bytes', () => {
+    expect(validateDataFilename('file\x00.txt')).toBe(false);
+  });
+
+  it('rejects Windows reserved names (case-insensitive)', () => {
+    expect(validateDataFilename('CON')).toBe(false);
+    expect(validateDataFilename('NUL.txt')).toBe(false);
+    expect(validateDataFilename('COM1.json')).toBe(false);
+    expect(validateDataFilename('con')).toBe(false);
+  });
+
+  it('rejects .. segments', () => {
+    expect(validateDataFilename('..')).toBe(false);
+    expect(validateDataFilename('../etc/passwd')).toBe(false);
+  });
+});
+
+describe('deleteFile', () => {
+  let dir: string;
+  beforeEach(async () => { dir = await fs.mkdtemp(path.join(os.tmpdir(), 'usagi-del-')); });
+
+  it('creates .bak before deleting', async () => {
+    const file = path.join(dir, 'module.lua');
+    await fs.writeFile(file, 'hello');
+    await deleteFile(dir, 'module.lua');
+    await expect(fs.access(file)).rejects.toThrow();
+    const bak = await fs.readFile(file + '.bak', 'utf8');
+    expect(bak).toBe('hello');
+  });
+
+  it('throws file_not_found if file does not exist', async () => {
+    await expect(deleteFile(dir, 'missing.lua')).rejects.toMatchObject({ type: 'file_not_found' });
+  });
+
+  it('refuses to delete main.lua', async () => {
+    await fs.writeFile(path.join(dir, 'main.lua'), 'content');
+    await expect(deleteFile(dir, 'main.lua')).rejects.toMatchObject({ type: 'forbidden' });
   });
 });

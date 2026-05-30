@@ -143,6 +143,37 @@ export function patchConfig(source: string, fields: Record<string, string | numb
   return result;
 }
 
+const WINDOWS_RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
+
+export function validateDataFilename(filename: string): boolean {
+  if (/[/\\]/.test(filename)) return false;
+  if (filename.includes('..')) return false;
+  if (filename.includes('\x00')) return false;
+  if (filename.includes(':')) return false;
+  if (WINDOWS_RESERVED.test(path.basename(filename))) return false;
+  return true;
+}
+
+export async function deleteFile(
+  resolvedProjectPath: string,
+  relativePath: string
+): Promise<{ deleted_path: string; backup_path: string }> {
+  if (relativePath === 'main.lua' || relativePath.endsWith('/main.lua') || relativePath.endsWith('\\main.lua')) {
+    throw Object.assign(new Error('Cannot delete main.lua'), { type: 'forbidden' });
+  }
+
+  const targetPath = path.join(resolvedProjectPath, relativePath);
+  const fv = await validatePath(targetPath, [resolvedProjectPath], ValidationMode.Write);
+  if (!fv.ok) throw fv.error;
+
+  return withFileLock(fv.resolvedPath, async () => {
+    const backup_path = await rotateBak(fv.resolvedPath);
+    if (!backup_path) throw Object.assign(new Error('File not found'), { type: 'file_not_found' });
+    await fs.unlink(fv.resolvedPath);
+    return { deleted_path: fv.resolvedPath, backup_path };
+  });
+}
+
 export function registerFileTools(
   server: McpServer,
   { allowedRoots }: { allowedRoots: string[] }
@@ -211,5 +242,143 @@ export function registerFileTools(
       });
     }
   );
-  // More tools added in Tasks 8–10
+  server.tool(
+    'usagi_write_data',
+    'Write a file to the project data/ directory.',
+    {
+      project_path: z.string(),
+      filename: z.string(),
+      content: z.union([z.string(), z.record(z.unknown())]),
+      encoding: z.enum(['json', 'text']).optional(),
+    },
+    async ({ project_path, filename, content, encoding }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      if (!validateDataFilename(filename)) {
+        return errResponse({ type: 'invalid_parameter', reason: 'invalid_filename', filename });
+      }
+
+      const dataDir = path.join(v.resolvedPath, 'data');
+      const targetPath = path.join(dataDir, filename);
+      const fv = await validatePath(targetPath, [dataDir], ValidationMode.Write);
+      if (!fv.ok) return errResponse(fv.error);
+
+      let written: string;
+      if (typeof content === 'object' || encoding === 'json') {
+        if (typeof content === 'string') {
+          try { JSON.parse(content); written = content; }
+          catch { return errResponse({ type: 'invalid_json', message: 'Content is not valid JSON.' }); }
+        } else {
+          written = JSON.stringify(content, null, 2);
+        }
+      } else {
+        written = content as string;
+      }
+
+      await fs.mkdir(dataDir, { recursive: true });
+
+      // Create file if new (for lockfile)
+      let fileExists = false;
+      try { await fs.access(fv.resolvedPath); fileExists = true; } catch { /* new */ }
+      if (!fileExists) await fs.writeFile(fv.resolvedPath, '', 'utf8');
+
+      return withFileLock(fv.resolvedPath, async () => {
+        const tmp = fv.resolvedPath + '_tmp_' + randomBytes(8).toString('hex');
+        await fs.writeFile(tmp, written, 'utf8');
+        await fs.rename(tmp, fv.resolvedPath);
+        return okResponse({ success: true, path: fv.resolvedPath });
+      }, { content: written });
+    }
+  );
+
+  server.tool(
+    'usagi_write_web_shell',
+    'Write shell.html (the web export HTML shell override).',
+    { project_path: z.string(), content: z.string() },
+    async ({ project_path, content }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      const shellPath = path.join(v.resolvedPath, 'shell.html');
+      const fv = await validatePath(shellPath, [v.resolvedPath], ValidationMode.Write);
+      if (!fv.ok) return errResponse(fv.error);
+
+      let fileExists = false;
+      try { await fs.access(fv.resolvedPath); fileExists = true; } catch { /* new */ }
+      if (!fileExists) await fs.writeFile(fv.resolvedPath, '', 'utf8');
+
+      return withFileLock(fv.resolvedPath, async () => {
+        const tmp = fv.resolvedPath + '_tmp_' + randomBytes(8).toString('hex');
+        await fs.writeFile(tmp, content, 'utf8');
+        await fs.rename(tmp, fv.resolvedPath);
+        return okResponse({
+          success: true,
+          path: fv.resolvedPath,
+          injection_points: ['<!-- USAGI_CANVAS -->', '<!-- USAGI_SCRIPTS -->', '<!-- USAGI_STYLES -->'],
+        });
+      }, { content });
+    }
+  );
+
+  server.tool(
+    'usagi_read_file',
+    'Read any file within the project.',
+    { project_path: z.string(), relative_path: z.string() },
+    async ({ project_path, relative_path }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      const targetPath = path.join(v.resolvedPath, relative_path);
+      const fv = await validatePath(targetPath, [v.resolvedPath], ValidationMode.Read);
+      if (!fv.ok) return errResponse(fv.error);
+      try {
+        const content = await fs.readFile(fv.resolvedPath, 'utf8');
+        return okResponse({ content, path: fv.resolvedPath });
+      } catch {
+        return errResponse({ type: 'file_not_found', path: fv.resolvedPath });
+      }
+    }
+  );
+
+  server.tool(
+    'usagi_list_files',
+    'List files in a project directory.',
+    {
+      project_path: z.string(),
+      relative_path: z.string().optional().default(''),
+    },
+    async ({ project_path, relative_path }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      const dir = relative_path ? path.join(v.resolvedPath, relative_path) : v.resolvedPath;
+      const dv = await validatePath(dir, [v.resolvedPath], ValidationMode.Read);
+      if (!dv.ok) return errResponse(dv.error);
+      try {
+        const entries = await fs.readdir(dv.resolvedPath, { withFileTypes: true });
+        const files = entries.map(e => ({ name: e.name, type: e.isDirectory() ? 'directory' as const : 'file' as const }));
+        return okResponse({ files });
+      } catch {
+        return errResponse({ type: 'file_not_found', path: dv.resolvedPath });
+      }
+    }
+  );
+
+  server.tool(
+    'usagi_delete_file',
+    'Delete a file with .bak backup. confirm: true is required.',
+    {
+      project_path: z.string(),
+      relative_path: z.string(),
+      confirm: z.boolean(),
+    },
+    async ({ project_path, relative_path, confirm }) => {
+      if (!confirm) return errResponse({ type: 'invalid_parameter', reason: 'confirm must be true to delete a file' });
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      try {
+        const result = await deleteFile(v.resolvedPath, relative_path);
+        return okResponse({ success: true, ...result });
+      } catch (e) {
+        return errResponse(e);
+      }
+    }
+  );
 }
