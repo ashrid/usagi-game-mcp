@@ -32,19 +32,20 @@ An MCP (Model Context Protocol) server that gives AI assistants full awareness o
 ## Installation
 
 ```bash
+npx usagi-game-mcp install
+```
+
+The installer detects which agentic CLIs are installed on your machine, presents a checkbox to select which ones to configure, and writes the MCP server entry into each config file.
+
+### Build from source
+
+```bash
 git clone https://github.com/ashrid/usagi-game-mcp.git
 cd usagi-game-mcp
 npm install
 npm run build
-```
-
-Verify the build:
-
-```bash
 npm test
 ```
-
-Expected output: 81 tests passing, 5 skipped (Lua binary integration tests, require a full Usagi install).
 
 ---
 
