@@ -6,6 +6,15 @@ import { RateLimiter } from './rate-limiter.js';
 import { registerConfigResource } from './resources/config.js';
 import { registerStructureResource } from './resources/structure.js';
 import { registerAssetsResource } from './resources/assets.js';
+import { registerPaletteResource } from './resources/palette.js';
+import { registerSpritesheetResource } from './resources/spritesheet.js';
+import { registerShadersResource } from './resources/shaders.js';
+import { registerFontResource } from './resources/font.js';
+import { registerSaveResource } from './resources/save.js';
+import { registerSettingsResource } from './resources/settings.js';
+import { registerDevLogResource } from './resources/dev-log.js';
+import { registerLuaFileResource } from './resources/lua-file.js';
+import { registerDataFileResource } from './resources/data-file.js';
 
 const CWD = process.cwd();
 
@@ -34,7 +43,16 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
   registerConfigResource(server, { allowedRoots, pathCache });
   registerStructureResource(server, { allowedRoots, pathCache });
   registerAssetsResource(server, { allowedRoots, pathCache });
-  // More resources registered in Tasks 14-23
+  registerPaletteResource(server, { allowedRoots, pathCache });
+  registerSpritesheetResource(server, { allowedRoots, pathCache });
+  registerShadersResource(server, { allowedRoots, pathCache });
+  registerFontResource(server, { allowedRoots, pathCache });
+  registerSaveResource(server, { allowedRoots, pathCache });
+  registerSettingsResource(server, { allowedRoots, pathCache });
+  registerDevLogResource(server);
+  registerLuaFileResource(server, { allowedRoots, pathCache });
+  registerDataFileResource(server, { allowedRoots, pathCache });
+  // More resources registered in Tasks 21-23
 
   const transport = new StdioServerTransport();
 
