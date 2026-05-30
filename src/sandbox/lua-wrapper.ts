@@ -2,14 +2,16 @@
 // It runs: sandbox setup → compile user code with restricted env → execute → JSON output.
 
 export function buildWrapperScript(userSource: string): string {
-  // Escape user source for embedding in a Lua long string.
-  // Use level-3 long strings ([===[...]===]) to avoid conflicts with user code.
-  const escaped = userSource.replace(/\]===/g, ']\\]==');
+  // Validate that user source doesn't contain the Lua long-string closing sequence.
+  // Lua long strings do NOT process backslash escapes, so we cannot safely escape this.
+  if (/\]===\]/.test(userSource)) {
+    throw new Error('_config() source contains forbidden sequence ]===] which cannot be safely embedded');
+  }
 
   return `
 -- usagi-mcp sandbox wrapper (generated)
 local _USER_SOURCE = [===[
-${escaped}
+${userSource}
 ]===]
 
 -- Minimal JSON encoder (no require needed)
