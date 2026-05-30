@@ -26,7 +26,15 @@ export function registerDevLogResource(
       const proc = opts.devManager.getProcess(v.resolvedPath);
       const buf = proc?.buffer;
       const payload = buf
-        ? { lines: Array.from(buf.lines), truncated: buf.truncated, next_line: buf.totalLinesWritten, total_lines: buf.totalLinesWritten }
+        ? (() => {
+            const lines = Array.from(buf.lines);
+            return {
+              lines,
+              truncated: buf.truncated,
+              next_line: buf.totalLinesWritten, // always current write position for resource snapshot
+              total_lines: buf.totalLinesWritten,
+            };
+          })()
         : { lines: [], truncated: false, next_line: 0, total_lines: 0 };
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(payload) }] };
     }
