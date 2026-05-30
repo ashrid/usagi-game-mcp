@@ -35,7 +35,12 @@ export function registerShadersResource(server: McpServer, deps: { allowedRoots:
 
       const shaders: ShaderInfo[] = [];
       for (const file of files) {
-        const src = await fs.readFile(path.join(shadersDir, file), 'utf8').catch(() => '');
+        const filePath = path.join(shadersDir, file);
+        // Validate each shader file is within the shaders directory
+        const fileValidation = await validatePath(filePath, [shadersDir], ValidationMode.Read);
+        if (!fileValidation.ok) continue; // skip symlinks escaping shaders/
+
+        const src = await fs.readFile(fileValidation.resolvedPath, 'utf8').catch(() => '');
         const uniforms: UniformDecl[] = [];
         for (const m of src.matchAll(/^\s*uniform\s+(\w+)\s+(\w+)\s*;/gm)) {
           uniforms.push({ type: m[1], name: m[2] });

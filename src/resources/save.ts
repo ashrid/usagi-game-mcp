@@ -37,6 +37,11 @@ export function registerSaveResource(server: McpServer, deps: { allowedRoots: st
         } catch { /* try next */ }
       }
 
+      // Sanitize: game_id must be a simple identifier, no path components
+      if (!gameId || /[/\\]|\.\./.test(gameId) || gameId.length > 64) {
+        gameId = 'usagi_game';
+      }
+
       const savePath = getPlatformSavePath(gameId);
       let saveData: unknown = null;
       try {
