@@ -198,8 +198,45 @@ export class DevProcessManager {
     }
   }
 
-  protected async _defaultSpawn(_projectPath: string): Promise<SpawnHandle> {
-    throw new Error('node-pty spawn not implemented; set _spawnImpl for testing or implement in Task 3');
+  protected async _defaultSpawn(projectPath: string): Promise<SpawnHandle> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ptyModule = await import('node-pty') as any;
+    const spawn = ptyModule.spawn ?? ptyModule.default?.spawn;
+
+    // Filtered environment — only safe vars + USAGI_*
+    const allowedKeys = new Set(['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'USERPROFILE', 'SystemRoot', 'APPDATA', 'LOCALAPPDATA', 'COMSPEC']);
+    const filteredEnv: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && (allowedKeys.has(k) || k.startsWith('USAGI_'))) {
+        filteredEnv[k] = v;
+      }
+    }
+
+    const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh';
+    const args = process.platform === 'win32' ? ['/c', 'usagi dev'] : ['-c', 'usagi dev'];
+    const pty = spawn(shell, args, {
+      cwd: projectPath,
+      env: filteredEnv,
+      cols: 120,
+      rows: 30,
+    });
+
+    return {
+      pid: pty.pid,
+      onData: (cb: (data: string) => void) => { pty.onData(cb); },
+      onExit: (cb: (code: number, signal: number) => void) => {
+        pty.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => cb(exitCode, signal ?? 0));
+      },
+      kill: (sig?: string) => {
+        if (process.platform === 'win32') {
+          import('node:child_process').then(({ execFile }) => {
+            execFile('taskkill', ['/PID', String(pty.pid), '/T', '/F'], () => {});
+          }).catch(() => {});
+        } else {
+          try { pty.kill(sig); } catch { /* ignore */ }
+        }
+      },
+    };
   }
 
   private async _cleanupFiles(projectPath: string): Promise<void> {
