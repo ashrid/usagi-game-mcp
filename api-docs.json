@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "modules": {
+    "gfx": {
+      "functions": [
+        { "name": "spr", "signature": "gfx.spr(index, x, y, [w], [h])", "description": "Draw sprite at grid index" },
+        { "name": "rect", "signature": "gfx.rect(x, y, w, h, color)", "description": "Draw filled rectangle" },
+        { "name": "line", "signature": "gfx.line(x1, y1, x2, y2, color)", "description": "Draw line" },
+        { "name": "print", "signature": "gfx.print(text, x, y, [color])", "description": "Draw text" },
+        { "name": "cls", "signature": "gfx.cls([color])", "description": "Clear screen" }
+      ]
+    },
+    "input": {
+      "functions": [
+        { "name": "pressed", "signature": "input.pressed(action)", "description": "True on the frame an action key is pressed" },
+        { "name": "held", "signature": "input.held(action)", "description": "True while action key is held" },
+        { "name": "released", "signature": "input.released(action)", "description": "True on the frame an action key is released" }
+      ]
+    },
+    "sfx": {
+      "functions": [
+        { "name": "play", "signature": "sfx.play(name)", "description": "Play a sound effect by name" }
+      ]
+    },
+    "music": {
+      "functions": [
+        { "name": "play", "signature": "music.play(name)", "description": "Play music track by name" },
+        { "name": "stop", "signature": "music.stop()", "description": "Stop current music" }
+      ]
+    },
+    "util": {
+      "functions": [
+        { "name": "lerp", "signature": "util.lerp(a, b, t)", "description": "Linear interpolation" },
+        { "name": "clamp", "signature": "util.clamp(v, min, max)", "description": "Clamp value to range" }
+      ]
+    },
+    "effect": {
+      "functions": [
+        { "name": "shake", "signature": "effect.shake(intensity, duration)", "description": "Screen shake effect" }
+      ]
+    },
+    "usagi": {
+      "hot_reload_semantics": "_init() is NOT called on file save/hot-reload. State is preserved. Only usagi_dev_reset (or F5) triggers _init() re-execution. usagi_write_config changes require usagi_dev_reset since _config() runs before _init() and is not re-executed on hot-reload.",
+      "functions": []
+    }
+  }
+}
