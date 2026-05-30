@@ -36,10 +36,14 @@ export async function validatePath(
 
     // For UNC paths that are explicitly allowed, perform prefix-based allowlist check
     // directly on the normalized raw path (path.resolve mangles UNC paths on Windows).
-    const normalizedRaw = rawPath.replace(/\//g, '\\').toLowerCase();
+    const normalizedRaw = path.win32.normalize(rawPath).toLowerCase();
     const uncAllowed = allowedRoots.some(root => {
       if (!root.startsWith('\\\\') && !root.startsWith('//')) return false;
-      const normalizedRoot = root.replace(/\//g, '\\').toLowerCase();
+      let normalizedRoot = path.win32.normalize(root).toLowerCase();
+      // Remove trailing separator for consistent prefix comparison
+      if (normalizedRoot.endsWith('\\')) {
+        normalizedRoot = normalizedRoot.slice(0, -1);
+      }
       const sep = '\\';
       return normalizedRaw.startsWith(normalizedRoot + sep) ||
              normalizedRaw === normalizedRoot;
