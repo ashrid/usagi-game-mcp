@@ -80,4 +80,57 @@ export function registerDevTools(
       return okResponse(status);
     }
   );
+
+  server.tool(
+    'usagi_dev_reset',
+    'Trigger _init() re-run via signal file. Falls back to process restart if signal unsupported.',
+    { project_path: z.string() },
+    async ({ project_path }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+
+      const proc = devManager.getProcess(v.resolvedPath);
+      if (!proc) return errResponse({ type: 'not_running', message: 'Dev server is not running.' });
+
+      const { randomBytes } = await import('node:crypto');
+      const nonce = randomBytes(16).toString('hex');
+      proc.lastNonce = nonce;
+
+      try {
+        await devManager.writeSignalFile(v.resolvedPath, nonce);
+        return okResponse({ success: true, reset_type: 'signal_file' });
+      } catch {
+        // Fallback: full process restart
+        await devManager.stop(v.resolvedPath).catch(() => {});
+        await devManager.start(v.resolvedPath);
+        return okResponse({ success: true, reset_type: 'process_restart' });
+      }
+    }
+  );
+
+  server.tool(
+    'usagi_read_log',
+    'Read lines from the dev server ring buffer (positional polling).',
+    {
+      project_path: z.string(),
+      since_line: z.number().optional().default(0),
+      count: z.number().optional().default(50),
+    },
+    async ({ project_path, since_line, count }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+      const proc = devManager.getProcess(v.resolvedPath);
+      if (!proc) {
+        return okResponse({ lines: [], next_line: 0, total_lines: 0, truncated: false });
+      }
+      const buf = proc.buffer;
+      const lines = buf.slice(since_line, count);
+      return okResponse({
+        lines,
+        next_line: since_line + lines.length,
+        total_lines: buf.totalLinesWritten,
+        truncated: buf.truncated,
+      });
+    }
+  );
 }
