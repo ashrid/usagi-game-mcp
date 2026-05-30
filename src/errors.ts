@@ -21,15 +21,7 @@ export function isUsagiError(v: unknown): v is McpError {
 }
 
 export function redactAbsolutePaths(message: string, projectPath: string): string {
-  // Normalize separators for comparison
-  const normalized = projectPath.replace(/\\/g, '/');
-  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Match Unix-style absolute paths starting with projectPath
-  let result = message.replace(new RegExp(escaped.replace(/\//g, '[/\\\\]') + '[/\\\\]?([^\\s"\']*)', 'gi'),
-    (_, rest) => `<project>/${rest}`);
-  // Also match Windows-style with backslashes
-  const winEscaped = projectPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
-  result = result.replace(new RegExp(winEscaped + '\\\\?([^\\s"\']*)', 'gi'),
-    (_, rest) => `<project>/${rest.replace(/\\/g, '/')}`);
-  return result;
+  const escaped = projectPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escaped.replace(/\\\\/g, '[/\\\\]') + '[/\\\\]?([^\\s"\']*)', 'gi');
+  return message.replace(pattern, (_, rest: string) => `<project>/${rest.replace(/\\/g, '/')}`);
 }
