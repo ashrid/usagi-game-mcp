@@ -77,7 +77,7 @@ export async function renameFile(
       // Apply require updates
       try {
         for (const { file, original } of rollbackList) {
-          const updated = original.replace(buildRequirePattern(fromModule), `require("${toModule}")`);
+          const updated = original.replace(buildRequirePattern(fromModule), `require($1${toModule}$1)`);
           await fs.writeFile(file, updated, 'utf8');
           requireUpdates++;
         }
@@ -113,7 +113,7 @@ function pathToModuleName(relativePath: string): string {
 
 function buildRequirePattern(moduleName: string): RegExp {
   const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`require\\(["']${escaped}["']\\)`, 'g');
+  return new RegExp(`require\\((["'])${escaped}\\1\\)`, 'g');
 }
 
 async function scanLuaFiles(
