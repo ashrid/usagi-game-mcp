@@ -17,6 +17,12 @@ import { registerLuaFileResource } from './resources/lua-file.js';
 import { registerDataFileResource } from './resources/data-file.js';
 import { registerContextResource } from './resources/context.js';
 import { registerDocsResource } from './resources/docs.js';
+import { DevProcessManager } from './dev/dev-process-manager.js';
+import { registerDevTools } from './tools/dev-tools.js';
+import { registerFileTools } from './tools/file-tools.js';
+import { registerRenameTools } from './tools/rename-tool.js';
+import { registerValidateTools } from './tools/validate-tool.js';
+import { registerScaffoldTools } from './tools/scaffold-tools.js';
 
 const CWD = process.cwd();
 
@@ -33,6 +39,7 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
   const allowedRoots = getAllowedRoots();
   const pathCache = new PathCache();
   const watcherManager = new WatcherManager(pathCache);
+  const devManager = new DevProcessManager();
   const rateLimiter = new RateLimiter({
     requestsPerMinute: parseInt(process.env['USAGI_MCP_RATE_LIMIT'] ?? '60', 10),
   });
@@ -51,16 +58,22 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
   registerFontResource(server, { allowedRoots, pathCache });
   registerSaveResource(server, { allowedRoots, pathCache });
   registerSettingsResource(server, { allowedRoots, pathCache });
-  registerDevLogResource(server);
+  registerDevLogResource(server, { allowedRoots, devManager });
   registerLuaFileResource(server, { allowedRoots, pathCache });
   registerDataFileResource(server, { allowedRoots, pathCache });
   registerContextResource(server, { allowedRoots, pathCache });
   registerDocsResource(server);
+  registerDevTools(server, { allowedRoots, devManager });
+  registerFileTools(server, { allowedRoots });
+  registerRenameTools(server, { allowedRoots });
+  registerValidateTools(server, { allowedRoots });
+  registerScaffoldTools(server, { allowedRoots });
 
   const transport = new StdioServerTransport();
 
   const shutdown = async (): Promise<void> => {
     watcherManager.closeAll();
+    await devManager.cleanupAll();
     await server.close();
   };
 
