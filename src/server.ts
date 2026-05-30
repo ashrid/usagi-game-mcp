@@ -56,7 +56,6 @@ export async function createServer(): Promise<{ server: McpServer; transport: St
   registerDataFileResource(server, { allowedRoots, pathCache });
   registerContextResource(server, { allowedRoots, pathCache });
   registerDocsResource(server);
-  // More resources registered in Tasks 22-23
 
   const transport = new StdioServerTransport();
 
