@@ -51,6 +51,14 @@ export function sanitizeConfigStrings(config: Record<string, unknown>): Record<s
       let s = v.slice(0, 1024);
       s = s.replace(/\x1b/g, '[non-printable stripped]');
       result[k] = s;
+    } else if (Array.isArray(v)) {
+      result[k] = v.map(item =>
+        typeof item === 'string'
+          ? item.slice(0, 1024).replace(/\x1b/g, '[non-printable stripped]')
+          : item !== null && typeof item === 'object' && !Array.isArray(item)
+            ? sanitizeConfigStrings(item as Record<string, unknown>)
+            : item
+      );
     } else if (v !== null && typeof v === 'object') {
       result[k] = sanitizeConfigStrings(v as Record<string, unknown>);
     } else {
