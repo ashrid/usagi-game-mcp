@@ -20,7 +20,8 @@
     "jimp": "^1.6.0",
     "chokidar": "^4.0.3",
     "node-pty": "^1.0.0",
-    "proper-lockfile": "^4.1.2"
+    "proper-lockfile": "^4.1.2",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
