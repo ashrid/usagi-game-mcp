@@ -51,49 +51,76 @@ npm test
 
 ## Configuration
 
-### Claude Desktop
+Run `npx usagi-game-mcp install` and the installer handles everything. It scans for installed CLIs, lets you pick which ones to configure via checkbox, and writes the correct config entry into each.
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+### Supported CLIs
+
+| CLI | Config written |
+|---|---|
+| Claude Code | `~/.claude/settings.json` |
+| Claude Desktop | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`<br>Windows: `%APPDATA%\Claude\claude_desktop_config.json`<br>Linux: `~/.config/Claude/claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| OpenCode | `~/.config/opencode/opencode.json` |
+| Codex CLI | `~/.codex/config.toml` |
+| GitHub Copilot CLI | `~/.copilot/mcp-config.json` |
+| Qwen Code | `~/.qwen/settings.json` |
+| AntiGravity | `~/.gemini/antigravity-cli/mcp_config.json` |
+| Pi | Prints manual instructions (no config file) |
+
+Only CLIs whose config directory exists on your machine are shown in the checkbox.
+
+### Project folder prompt
+
+The installer asks for an optional Usagi projects folder. Press Enter to skip — the server will default to the current working directory when invoked. You can set it later by re-running `npx usagi-game-mcp install` or by telling your agent:
+
+```
+Set USAGI_ALLOWED_ROOTS to /path/to/games and re-run: npx usagi-game-mcp install
+```
+
+### What the installer writes
+
+**Claude Code, Claude Desktop, Cursor, Windsurf, Copilot CLI, Qwen Code, AntiGravity** (`mcpServers` JSON):
 
 ```json
 {
   "mcpServers": {
     "usagi-game-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/usagi-game-mcp/dist/index.js"],
-      "env": {
-        "USAGI_ALLOWED_ROOTS": "/path/to/your/games"
-      }
+      "command": "npx",
+      "args": ["-y", "usagi-game-mcp"],
+      "env": { "USAGI_ALLOWED_ROOTS": "/path/to/your/games" }
     }
   }
 }
 ```
 
-### Claude Code
-
-Add to your project or global MCP settings:
+**OpenCode** (`mcp` key):
 
 ```json
 {
-  "mcpServers": {
+  "mcp": {
     "usagi-game-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/usagi-game-mcp/dist/index.js"],
-      "env": {
-        "USAGI_ALLOWED_ROOTS": "/path/to/your/games"
-      }
+      "type": "local",
+      "command": ["npx", "-y", "usagi-game-mcp"],
+      "enabled": true,
+      "environment": { "USAGI_ALLOWED_ROOTS": "/path/to/your/games" }
     }
   }
 }
 ```
 
-### Windows paths
+**Codex CLI** (TOML):
 
-Use semicolons to separate multiple roots:
+```toml
+[mcp_servers.usagi-game-mcp]
+command = "npx"
+args = ["-y", "usagi-game-mcp"]
 
-```json
-"USAGI_ALLOWED_ROOTS": "C:\\Users\\you\\games;D:\\projects\\usagi"
+[mcp_servers.usagi-game-mcp.env]
+USAGI_ALLOWED_ROOTS = "/path/to/your/games"
 ```
+
+The `env` / `environment` block is omitted if you skip the folder prompt. Existing entries in config files are never overwritten — the installer skips with `(already installed, skipped)` if the entry already exists.
 
 ### Environment variables
 
