@@ -28,10 +28,11 @@ function ${entityName}:init()
 end
 
 function ${entityName}:update(dt)
+  dt = math.min(dt, 0.05)
 end
 
 function ${entityName}:draw()
-  usagi.gfx.spr(self.sprite, self.x, self.y)
+  gfx.spr(self.sprite, self.x, self.y)
 end
 
 return ${entityName}
@@ -43,14 +44,19 @@ export function generateStateScaffold(stateName: string, imports: string[] = [])
   return `-- ${stateName} state${importLines ? '\n' + importLines : ''}
 
 local ${stateName} = {}
+local _initialized = false
 
 function ${stateName}.init()
+  _initialized = true
 end
 
 function ${stateName}.update(dt)
+  if not _initialized then return end
+  dt = math.min(dt, 0.05)
 end
 
 function ${stateName}.draw(dt)
+  if not _initialized then return end
 end
 
 return ${stateName}

@@ -133,4 +133,63 @@ export function registerDevTools(
       });
     }
   );
+
+  server.tool(
+    'usagi_boot_test',
+    'Smoke-test a project: starts the dev server, waits for it to settle, checks logs for errors, then stops it. Exit 124 (timeout kill) = running = PASS.',
+    {
+      project_path: z.string(),
+      timeout_ms: z.number().optional().default(5_000),
+    },
+    async ({ project_path, timeout_ms }) => {
+      const v = await validatePath(project_path, allowedRoots, ValidationMode.Read);
+      if (!v.ok) return errResponse(v.error);
+
+      // Stop any existing session so we get a clean log
+      await devManager.stop(v.resolvedPath).catch(() => {});
+
+      let pid: number;
+      try {
+        const r = await devManager.start(v.resolvedPath);
+        pid = r.pid;
+      } catch (e) {
+        return errResponse({ type: 'start_failed', message: String(e) });
+      }
+
+      await new Promise(r => setTimeout(r, Math.min(timeout_ms, 10_000)));
+
+      const proc = devManager.getProcess(v.resolvedPath);
+      const allLines = proc ? proc.buffer.slice(0, 500) : [];
+      const crashed = proc?.status === 'crashed';
+
+      await devManager.stop(v.resolvedPath).catch(() => {});
+
+      // Error patterns from common Usagi runtime failures
+      const ERROR_PATTERNS = [
+        /\[string .+\]:\d+:/,          // Lua runtime error with location
+        /attempt to (index|call) a nil/,
+        /stack traceback/,
+        /bad argument #\d+ to/,
+        /syntax error near/,
+        /not found$/,
+        /Error:/i,
+      ];
+
+      const errorLines = allLines.filter(l => ERROR_PATTERNS.some(p => p.test(l)));
+      const passed = !crashed && errorLines.length === 0;
+
+      return okResponse({
+        passed,
+        pid,
+        status: crashed ? 'crashed' : 'ran',
+        error_lines: errorLines,
+        all_lines: allLines,
+        hint: passed
+          ? 'No errors detected in boot window.'
+          : crashed
+            ? 'Dev server crashed. Check error_lines for the first failure.'
+            : 'Runtime errors detected. Check error_lines — the first entry is usually the root cause.',
+      });
+    }
+  );
 }

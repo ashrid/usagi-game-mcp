@@ -2,7 +2,7 @@
 
 An MCP (Model Context Protocol) server that gives AI assistants full awareness of and control over [Usagi](https://usagiengine.com/) game engine projects. Built for Claude Desktop, Claude Code, and any MCP-compatible client.
 
-**35 endpoints** — 14 read resources + 21 write/action tools — covering project inspection, dev server management, file editing, scaffolding, and live log streaming.
+**36 endpoints** — 14 read resources + 22 write/action tools — covering project inspection, dev server management, file editing, scaffolding, live log streaming, and smoke testing.
 
 ---
 
@@ -166,6 +166,7 @@ Resources are read via URI. Your MCP client fetches them automatically when give
 | `usagi_dev_status` | Get running status, PID, uptime, and last 10 log lines. |
 | `usagi_dev_reset` | Trigger a `_init()` re-run without a full restart (writes a signal file with a nonce). Falls back to process restart if unsupported. |
 | `usagi_read_log` | Poll the dev server output ring buffer. Pass `since_line` to get only new lines since last call. |
+| `usagi_boot_test` | Smoke-test a project: starts the dev server fresh, waits up to 5 seconds, collects output, stops it, and returns `{ passed, error_lines, all_lines }`. Detects Lua runtime errors, nil dereferences, and syntax failures at boot time. |
 
 The dev server tracks crashes: if the process crashes 3+ times within 30 seconds, auto-restart is disabled and a message is appended to the log.
 
@@ -209,9 +210,19 @@ Backup rotation keeps up to 3 files: `.bak`, `.bak.2`, `.bak.3`. The oldest is d
 
 | Tool | Description |
 |---|---|
-| `usagi_validate_project` | Structural validation: checks that `main.lua` exists, that `_init()`, `_update()`, and `_draw()` are defined, and that `game_id` is set when `usagi.save/load` is used. Does not execute code. |
+| `usagi_validate_project` | Structural validation + Lua lint scan across all project files. Does not execute code. |
 
-Returns `{ valid, errors, scope: "structural", runtime_validation: "not_supported", limitations }`.
+Returns `{ valid, errors, warnings, scope: "structural", runtime_validation: "not_supported", limitations }`.
+
+**Errors** (block `valid: true`): missing `main.lua`, missing `_init`/`_update`/`_draw`, missing `game_id` when `usagi.save/load` is used.
+
+**Warnings** (advisory lint across every `.lua` file):
+
+| Warning type | What it catches |
+|---|---|
+| `compound_assign_in_if` | `if cond then x += 1 end` — the Usagi preprocessor doesn't rewrite compound assignments on single-line ifs |
+| `invalid_color_constant` | `gfx.COLOR_CYAN`, `gfx.COLOR_DARK_RED` — not part of the 16-color palette |
+| `engine_global_rawget` | `rawget(_G, "gfx")` / `rawget(_G, "effect")` — engine globals are `nil` at `require()` time and only available inside function bodies |
 
 ---
 
@@ -220,8 +231,8 @@ Returns `{ valid, errors, scope: "structural", runtime_validation: "not_supporte
 | Tool | Description |
 |---|---|
 | `usagi_init_project` | Initialize a new Usagi project by running `usagi init`. |
-| `usagi_scaffold_entity` | Generate a Lua entity module with `new()`, `init()`, `update(dt)`, `draw()`. Optionally includes a collision rectangle. |
-| `usagi_scaffold_state` | Generate a game-flow state module with `init()`, `update(dt)`, `draw(dt)`. |
+| `usagi_scaffold_entity` | Generate a Lua entity module with `new()`, `init()`, `update(dt)`, `draw()`. `update` includes `dt = math.min(dt, 0.05)` spike protection. Optionally includes a collision rectangle. |
+| `usagi_scaffold_state` | Generate a game-flow state module with `init()`, `update(dt)`, `draw(dt)`. Includes an `_initialized` nil guard so `update`/`draw` are no-ops until `init()` is called, plus `dt` clamping. |
 | `usagi_scaffold_state_machine` | Generate a state machine module with a `States` table, `set()`, and `get()`. |
 | `usagi_scaffold_collision_handler` | Generate a collision handler module for rect-rect, rect-circle, or circle-circle shapes. |
 | `usagi_scaffold_save_system` | Generate a `Save` module with `load()`, `save()`, and `reset()` backed by `usagi.save/load`. |
@@ -282,6 +293,18 @@ src/
   server.ts                 # Server entry point, resource + tool registration
   index.ts                  # stdio transport bootstrap
 ```
+
+---
+
+## Changelog
+
+### 0.1.5
+- **`usagi_boot_test`** — new smoke-test tool: starts the dev server, waits up to 5 s, captures output, stops it, and returns `passed`/`error_lines`. Detects Lua nil dereferences, syntax errors, and missing-file crashes at boot time.
+- **`usagi_validate_project`** — now scans every `.lua` file in the project and returns a `warnings[]` array. Catches compound assignments in single-line `if` statements (`+=`/`-=` preprocessor limitation), invalid palette color constants (`COLOR_CYAN`, `COLOR_DARK_RED`), and `rawget(_G, engine_global)` patterns that return `nil` at require-time.
+- **Scaffold templates** — `usagi_scaffold_entity` and `usagi_scaffold_state` now include `dt = math.min(dt, 0.05)` delta-time spike protection in `update()`. `usagi_scaffold_state` adds an `_initialized` nil guard so `update`/`draw` are safe to call before `init()` runs.
+
+### 0.1.0
+- Initial release: 35 endpoints, npx installer for 10 CLIs, dev server PTY management, file tools with `.bak` rotation, rename with require-graph rewriting, structural validation, scaffolding, and API docs resource.
 
 ---
 

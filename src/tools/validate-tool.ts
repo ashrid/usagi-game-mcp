@@ -13,14 +13,95 @@ interface ValidationError {
   hint?: string;
 }
 
+const INVALID_COLORS: Record<string, string> = {
+  'COLOR_CYAN': 'Use gfx.COLOR_BLUE or gfx.COLOR_WHITE instead.',
+  'COLOR_DARK_RED': 'Use gfx.COLOR_RED instead.',
+};
+
+const ENGINE_GLOBALS = ['gfx', 'input', 'sfx', 'music', 'effect', 'usagi', 'util'];
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.usagi-mcp', 'dist']);
+
+async function collectLuaFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const name = String(entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(name)) {
+          results.push(...await collectLuaFiles(path.join(dir, name)));
+        }
+      } else if (name.endsWith('.lua')) {
+        results.push(path.join(dir, name));
+      }
+    }
+  } catch { /* unreadable dir */ }
+  return results;
+}
+
+export function lintLuaSource(source: string, relPath: string): ValidationError[] {
+  const issues: ValidationError[] = [];
+  const lines = source.split('\n');
+
+  // Lesson 2: compound assignment operators inside single-line if statements
+  lines.forEach((line, i) => {
+    const stripped = line.replace(/--.*$/, '');
+    if (/\bthen\b.*(?:\+=|-=|\*=|\/=)/.test(stripped)) {
+      issues.push({
+        type: 'compound_assign_in_if',
+        file: relPath,
+        line: i + 1,
+        message: 'Compound assignment (+=/-=) inside single-line if is not supported by the Usagi preprocessor.',
+        hint: 'Split to multi-line: if cond then\n  x = x + 1\nend',
+      });
+    }
+  });
+
+  // Lesson 3: invalid color constants
+  for (const [badColor, hint] of Object.entries(INVALID_COLORS)) {
+    const regex = new RegExp(`gfx\\.${badColor}\\b`, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(source)) !== null) {
+      const line = source.substring(0, m.index).split('\n').length;
+      issues.push({
+        type: 'invalid_color_constant',
+        file: relPath,
+        line,
+        message: `gfx.${badColor} is not a valid Usagi palette color.`,
+        hint,
+      });
+    }
+  }
+
+  // Lesson 14: rawget(_G, engine_global) — nil at require-time
+  for (const glob of ENGINE_GLOBALS) {
+    const regex = new RegExp(`rawget\\s*\\(\\s*_G\\s*,\\s*["']${glob}["']\\s*\\)`, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(source)) !== null) {
+      const line = source.substring(0, m.index).split('\n').length;
+      issues.push({
+        type: 'engine_global_rawget',
+        file: relPath,
+        line,
+        message: `rawget(_G, "${glob}") returns nil at require-time; engine globals are injected after modules load.`,
+        hint: `Use the bare global \`${glob}\` directly inside function bodies instead.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 export async function validateProject(projectPath: string): Promise<{
   valid: boolean;
   scope: 'structural';
   runtime_validation: 'not_supported';
   errors: ValidationError[];
+  warnings: ValidationError[];
   limitations: string[];
 }> {
   const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
   const mainLua = path.join(projectPath, 'main.lua');
   let mainSource = '';
 
@@ -60,11 +141,22 @@ export async function validateProject(projectPath: string): Promise<{
     }
   }
 
+  // Lint all Lua files for common pitfalls
+  const luaFiles = await collectLuaFiles(projectPath);
+  for (const luaFile of luaFiles) {
+    let src: string;
+    try { src = await fs.readFile(luaFile, 'utf8'); }
+    catch { continue; }
+    const rel = path.relative(projectPath, luaFile).replace(/\\/g, '/');
+    warnings.push(...lintLuaSource(src, rel));
+  }
+
   return {
     valid: errors.length === 0,
     scope: 'structural',
     runtime_validation: 'not_supported',
     errors,
+    warnings,
     limitations: [
       'Does not check Lua logic errors or runtime behavior',
       'Does not validate sprite indices referenced in code',
