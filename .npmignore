@@ -1,0 +1,17 @@
+# Source and tests — not needed at runtime
+src/
+tests/
+
+# Internal docs and planning files
+docs/
+context.md
+
+# Build tooling
+tsconfig.json
+vitest.config.ts
+
+# Dev server state
+.usagi-mcp/
+
+# Editor / AI assistant files
+.claude/
